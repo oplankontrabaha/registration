@@ -42,7 +42,7 @@ button{touch-action:manipulation}
   .page{width:100%;max-width:100vw;height:auto;flex-direction:column;padding:12px;overflow-x:hidden;overflow-y:visible}
   .shell,.map-pane-container{flex:1 1 auto;max-width:100%;width:100%;min-width:0;height:auto;overflow:visible;padding-right:0;padding-bottom:0}
   .page{padding-bottom:64px}
-  input[type=text],input[type=number],input[type=password],input[type=email],select{font-size:16px!important}
+  input[type=text],input[type=number],input[type=password],input[type=email],input[type=tel],select{font-size:16px!important}
 }
 
 /* ============================================================
@@ -114,7 +114,7 @@ body.okb-foreign .okb-scoped{opacity:.42;pointer-events:none}
 .step-no{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;flex:0 0 25px;border-radius:50%;background:var(--orange);color:#fff;font-family:var(--mono);font-size:10px;font-weight:600;margin-top:1px}
 .step-title{margin:0;font-size:14px;font-weight:700}.step-sub{margin:2px 0 0;color:var(--muted);font-size:11px}
 .field+.field{margin-top:11px}.field-label{display:block;margin:0 0 5px;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-input[type=text],input[type=number],input[type=password],input[type=email]{width:100%;min-height:39px;padding:8px 11px;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:8px;font-size:13px;transition:border-color .15s,box-shadow .15s,background .15s}
+input[type=text],input[type=number],input[type=password],input[type=email],input[type=tel]{width:100%;min-height:39px;padding:8px 11px;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:8px;font-size:13px;transition:border-color .15s,box-shadow .15s,background .15s}
 input:focus{outline:0;border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-wash)}
 
 .preselect-note{display:none;margin-top:5px;color:var(--muted-2);font-size:10px;font-style:italic}.preselect-note.show{display:block}
@@ -815,13 +815,13 @@ body.okb-rule-hit .hero-rule{animation:heroRule .8s cubic-bezier(.2,.7,.2,1) bot
   </div>
 </div>
 
-<!-- Required submitter email -->
+<!-- Required submitter contact details: official email + phone number -->
 <div class="modal-backdrop" id="emailBackdrop">
   <div class="modal">
     <div class="modal-head">
       <div>
-        <h3>Email Notification</h3>
-        <p>Enter your official DPWH email address to receive registration and approval updates.</p>
+        <h3>Contact Details</h3>
+        <p>Enter your official DPWH email address and a phone number so the OKB Secretariat can send updates and reach you about this registration.</p>
       </div>
       <button type="button" class="modal-close" id="emailClose">&times;</button>
     </div>
@@ -831,6 +831,10 @@ body.okb-rule-hit .hero-rule{animation:heroRule .8s cubic-bezier(.2,.7,.2,1) bot
       <input type="email" id="optionalSubmitterEmail" autocomplete="email" inputmode="email" placeholder="name@dpwh.gov.ph" required>
       <p class="field-note">This address will receive the pending-approval notice and the final approval or rejection result.</p>
       <div class="field-error" id="emailInvalid">Official DPWH email address is required for this transaction.</div>
+      <label class="field-label" for="submitterPhone" style="margin-top:14px">Mobile / Phone Number</label>
+      <input type="tel" id="submitterPhone" autocomplete="tel" inputmode="tel" placeholder="e.g. 0917 123 4567" maxlength="20" required>
+      <p class="field-note">The Secretariat may call or text this number if they have questions about the line you submitted.</p>
+      <div class="field-error" id="phoneInvalid">A phone number is required, e.g. 0917 123 4567 or (02) 8123 4567.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="emailBack" type="button">Back</button>
@@ -943,7 +947,7 @@ const state={
      recreation is simply always on. */
   shape:'line',
   pendingUpload:null,pendingFileName:'',submitting:false,refinementVisible:true,recreationEnabled:true,
-  optionalSubmitterEmail:'',locationViewLocked:false
+  optionalSubmitterEmail:'',submitterPhone:'',locationViewLocked:false
 };
 let rawSegments=[];
 let recreated=[];
@@ -2352,28 +2356,47 @@ function openOptionalEmail(){
   $('confirmBackdrop').classList.remove('open');
   $('emailRegion').textContent=$('regionSelect').value;
   $('optionalSubmitterEmail').value=state.optionalSubmitterEmail||'';
+  $('submitterPhone').value=state.submitterPhone||'';
   $('emailInvalid').classList.remove('show');
+  $('phoneInvalid').classList.remove('show');
   $('emailBackdrop').classList.add('open');
   window.setTimeout(()=>$('optionalSubmitterEmail').focus(),80);
 }
 function closeOptionalEmail(back){
   if(state.submitting)return;
   state.optionalSubmitterEmail=$('optionalSubmitterEmail').value.trim();
+  state.submitterPhone=$('submitterPhone').value.trim();
   $('emailInvalid').classList.remove('show');
+  $('phoneInvalid').classList.remove('show');
   $('emailBackdrop').classList.remove('open');
   if(back)$('confirmBackdrop').classList.add('open');
 }
 function optionalEmailValue(){
   return String($('optionalSubmitterEmail').value||'').trim();
 }
+/* A phone number is accepted when it uses only digits, spaces, +, -, . and
+   brackets, and has 7 to 13 digits in all: 0917 123 4567, +63 917 123 4567,
+   (02) 8123 4567 and 8123-4567 all pass. The server checks the same rule. */
+function isValidPhone(value){
+  const raw=String(value||'').trim();
+  if(!/^[+\d()\-.\s]{7,20}$/.test(raw))return false;
+  const digits=raw.replace(/\D/g,'');
+  return digits.length>=7&&digits.length<=13;
+}
 async function continueOptionalEmail(){
   if(state.submitting)return;
   const email=optionalEmailValue();
+  const phone=String($('submitterPhone').value||'').trim().replace(/\s+/g,' ');
   $('emailInvalid').classList.remove('show');
+  $('phoneInvalid').classList.remove('show');
   if(!/^[^\s@]+@dpwh\.gov\.ph$/i.test(email)){
     $('emailInvalid').classList.add('show');$('optionalSubmitterEmail').focus();return;
   }
+  if(!isValidPhone(phone)){
+    $('phoneInvalid').classList.add('show');$('submitterPhone').focus();return;
+  }
   state.optionalSubmitterEmail=email;
+  state.submitterPhone=phone;
   $('emailBackdrop').classList.remove('open');
   await submitRegistration(email);
 }
@@ -2396,6 +2419,7 @@ function payloadForSubmit(submitterEmail){
     extendName:extending()&&target?target.name:'',
     extendType:extending()&&target?target.type:'',
     submitterEmail:String(submitterEmail||'').trim(),
+    submitterPhone:String(state.submitterPhone||'').trim(),
     registrySelection:mapping()&&!!state.selectedRegistryWaterway,
     registrySourceSite:mapping()&&state.selectedRegistryWaterway?state.selectedRegistryWaterway.site:'',
     interval,smoothing,points:buildRows()
@@ -2434,6 +2458,7 @@ function showSuccess(response){
     '<div class="confirmation-row"><span class="confirmation-key">Type</span><span class="confirmation-value">'+escapeHtml(state.selectedType)+'</span></div>'+
     '<div class="confirmation-row"><span class="confirmation-key">Total Points</span><span class="confirmation-value">'+count+'</span></div>'+
     '<div class="confirmation-row"><span class="confirmation-key">Email Notification</span><span class="confirmation-value">'+escapeHtml(receiptEmail||'Not provided')+'</span></div>'+
+    '<div class="confirmation-row"><span class="confirmation-key">Contact Number</span><span class="confirmation-value">'+escapeHtml(String(response.submitterPhone||state.submitterPhone||'').trim()||'Not provided')+'</span></div>'+
     '<div class="confirmation-row"><span class="confirmation-key">Coordinate Start Row</span><span class="confirmation-value">'+escapeHtml(response.startRow||'Updated')+'</span></div>'+
     '<div class="confirmation-row"><span class="confirmation-key">Registry Sheet</span><span class="confirmation-value">'+escapeHtml(response.registrySheet||'Updated')+'</span></div>';
   $('confirmationPage').classList.add('show');
@@ -2444,7 +2469,7 @@ function resetRegistrationPortal(){
   document.body.classList.remove('submission-active');
   cancelRecreationAnimation();referenceTraceToken++;
   rawSegments=[];recreated=[];
-  state.mode='REGISTRATION';state.extendTarget=null;state.extendOptions=[];document.body.classList.remove('extending','mapping');state.selectedType='Waterway';state.shape='line';state.customSite=false;state.customIntervalMode=false;state.plotting=false;state.editMode=false;state.activeManualSegment=null;state.selectedRegistryWaterway=null;state.unmappedRegistryOptions=[];state.pendingUpload=null;state.pendingFileName='';state.submitting=false;state.refinementVisible=true;state.recreationEnabled=true;state.optionalSubmitterEmail='';state.locationViewLocked=false;
+  state.mode='REGISTRATION';state.extendTarget=null;state.extendOptions=[];document.body.classList.remove('extending','mapping');state.selectedType='Waterway';state.shape='line';state.customSite=false;state.customIntervalMode=false;state.plotting=false;state.editMode=false;state.activeManualSegment=null;state.selectedRegistryWaterway=null;state.unmappedRegistryOptions=[];state.pendingUpload=null;state.pendingFileName='';state.submitting=false;state.refinementVisible=true;state.recreationEnabled=true;state.optionalSubmitterEmail='';state.submitterPhone='';state.locationViewLocked=false;
   $('regionSelect').value='';
   $('siteSelect').value='';$('siteNote').classList.remove('show');$('siteNote').textContent='';
   chooseMode('REGISTRATION');chooseShape('line');
@@ -2453,7 +2478,7 @@ function resetRegistrationPortal(){
   interval=20;smoothing=2;
   Array.from($('intervalSeg').children).forEach(button=>button.setAttribute('aria-pressed',button.dataset.interval==='20'?'true':'false'));
   $('customIntervalWrap').style.display='none';$('customInterval').value='';
-  smoothing=2;$('optionalSubmitterEmail').value='';$('emailInvalid').classList.remove('show');
+  smoothing=2;$('optionalSubmitterEmail').value='';$('emailInvalid').classList.remove('show');$('submitterPhone').value='';$('phoneInvalid').classList.remove('show');
   ['confirmBackdrop','emailBackdrop','viewBackdrop','replaceBackdrop','lineBackdrop'].forEach(id=>$(id).classList.remove('open','dissolving'));
   if(referenceGroup)referenceGroup.clearLayers();if(referenceTraceGroup)referenceTraceGroup.clearLayers();if(workspaceGroup)workspaceGroup.clearLayers();if(recreationTraceGroup)recreationTraceGroup.clearLayers();
   updateToolbar();updateResults();updateMapStat();
@@ -2480,7 +2505,7 @@ $('replaceClose').onclick=cancelPendingUpload;$('replaceCancel').onclick=cancelP
 $('lineClose').onclick=cancelPendingUpload;$('lineCancel').onclick=cancelPendingUpload;$('lineImport').onclick=importSelectedLines;$('lineBackdrop').onclick=event=>{if(event.target===$('lineBackdrop'))cancelPendingUpload();};
 $('viewBtn').onclick=openView;$('viewClose').onclick=()=>$('viewBackdrop').classList.remove('open');$('viewBackdrop').onclick=event=>{if(event.target===$('viewBackdrop'))$('viewBackdrop').classList.remove('open');};$('copyBtn').onclick=copyRows;$('csvBtn').onclick=downloadCsv;$('kmzBtn').onclick=downloadKmz;
 $('submitBtn').onclick=openConfirm;$('confirmClose').onclick=closeConfirm;$('confirmCancel').onclick=closeConfirm;$('confirmContinue').onclick=openOptionalEmail;$('confirmBackdrop').onclick=event=>{if(event.target===$('confirmBackdrop'))closeConfirm();};
-$('emailClose').onclick=()=>closeOptionalEmail(false);$('emailBack').onclick=()=>closeOptionalEmail(true);$('emailContinue').onclick=()=>continueOptionalEmail();$('emailBackdrop').onclick=event=>{if(event.target===$('emailBackdrop'))closeOptionalEmail(false);};$('optionalSubmitterEmail').oninput=()=>{$('emailInvalid').classList.remove('show');};$('optionalSubmitterEmail').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();continueOptionalEmail();}};
+$('emailClose').onclick=()=>closeOptionalEmail(false);$('emailBack').onclick=()=>closeOptionalEmail(true);$('emailContinue').onclick=()=>continueOptionalEmail();$('emailBackdrop').onclick=event=>{if(event.target===$('emailBackdrop'))closeOptionalEmail(false);};$('optionalSubmitterEmail').oninput=()=>{$('emailInvalid').classList.remove('show');};$('optionalSubmitterEmail').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('submitterPhone').focus();}};$('submitterPhone').oninput=()=>{$('phoneInvalid').classList.remove('show');};$('submitterPhone').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();continueOptionalEmail();}};
 $('confirmationAgain').onclick=resetRegistrationPortal;
 document.addEventListener('keydown',event=>{if(event.key!=='Escape'||state.submitting)return;closeCombo();openMapLayers(false);cancelPendingUpload();$('viewBackdrop').classList.remove('open');closeConfirm();closeOptionalEmail(false);});
 /* boot() is no longer called on load. The sign-in gate starts the app once a
