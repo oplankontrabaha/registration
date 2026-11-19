@@ -220,6 +220,29 @@ input:focus{outline:0;border-color:var(--orange);box-shadow:0 0 0 3px var(--oran
    steps, so the person can see that the step was considered. */
 .mode-note{margin-top:7px;color:var(--muted-2);font-size:10.4px;line-height:1.5}
 body.extending #customSiteFoot{display:none}
+/* "Site not in the list?" — a plain, obvious way to add a new site, instead
+   of relying on people finding the option at the bottom of the dropdown. */
+.new-site{margin-top:9px}
+.new-site-btn{width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.8px dashed var(--orange);border-radius:10px;
+  background:var(--orange-wash);color:var(--orange-dark);font:inherit;font-size:12px;font-weight:600;text-align:left;cursor:pointer;
+  transition:background .18s,border-color .18s,transform .18s}
+.new-site-btn:hover{background:#fbe1d3;border-style:solid}
+.new-site-btn:active{transform:scale(.99)}
+.new-site-btn b{color:var(--navy)}
+.new-site-btn:disabled{opacity:.45;cursor:not-allowed}
+.new-site-btn .ns-ic{flex:0 0 24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#F7833F,var(--orange-dark));color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(242,101,34,.35)}
+.new-site.open .new-site-btn{display:none}
+.new-site-panel{padding:12px;border:1.5px solid var(--orange);border-radius:10px;background:#fff;box-shadow:0 8px 22px rgba(11,31,58,.10);animation:nsIn .24s ease}
+.new-site-panel[hidden]{display:none}
+@keyframes nsIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.new-site-panel .ns-label{display:block;margin:0 0 6px;color:var(--navy);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.new-site-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end}
+.new-site-actions button{padding:9px 15px;border-radius:8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.ns-cancel{border:1.5px solid var(--line);background:#fff;color:var(--ink)}
+.ns-add{border:0;background:var(--navy);color:#fff;box-shadow:0 4px 12px rgba(11,31,58,.22)}
+.ns-add:hover{background:var(--navy-2)}
+.new-site-hint{margin:9px 0 0;color:var(--muted-2);font-size:10.2px;line-height:1.45}
 /* Any region may extend any waterway, so the own-region gate that greys the
    submit button is lifted here. Registration keeps it. */
 body.extending.okb-foreign .okb-scoped{opacity:1;pointer-events:auto}
@@ -611,12 +634,27 @@ body.okb-rule-hit .hero-rule{animation:heroRule .8s cubic-bezier(.2,.7,.2,1) bot
       </section>
 
       <section class="step" id="siteStep">
-        <div class="step-head"><span class="step-no">02</span><div><h3 class="step-title">Select Site</h3><p class="step-sub">Choose a listed municipality or site. A site that is not listed can be typed in and added.</p></div></div>
+        <div class="step-head"><span class="step-no">02</span><div><h3 class="step-title">Select Site</h3><p class="step-sub">Choose a listed municipality or site. If yours is not listed, use <b>Add a new site</b> below the box.</p></div></div>
         <div class="combo" id="siteCombo">
           <input type="text" id="siteInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Select a region first" disabled>
           <button type="button" class="combo-caret" tabindex="-1" aria-label="Show sites"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
         </div>
         <input type="hidden" id="siteSelect">
+        <div class="new-site" id="customSiteFoot">
+          <button type="button" class="new-site-btn" id="newSiteBtn" disabled>
+            <span class="ns-ic"><svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 2v8M2 6h8"/></svg></span>
+            <span><b>Site not in the list?</b> Tap here to add a new site</span>
+          </button>
+          <div class="new-site-panel" id="newSitePanel" hidden>
+            <label class="ns-label" for="newSiteInput">New site name</label>
+            <input type="text" id="newSiteInput" maxlength="80" autocomplete="off" autocapitalize="words" placeholder="e.g. Municipality of Guagua">
+            <div class="new-site-actions">
+              <button type="button" class="ns-cancel" id="newSiteCancel">Cancel</button>
+              <button type="button" class="ns-add" id="newSiteAdd">Add this site</button>
+            </div>
+            <p class="new-site-hint">It will be filed under <b id="newSiteRegion">your region</b> and reviewed by the OKB Secretariat together with your registration.</p>
+          </div>
+        </div>
         <div class="preselect-note" id="siteNote"></div>
       </section>
 
@@ -1333,6 +1371,41 @@ function refreshSelectors(){
   renderUnmappedRegistryOptions();
   renderExtendOptions();
   checkDuplicateName();
+  syncNewSiteButton();
+}
+
+/* ---- "Site not in the list?" button and its small form ---- */
+function syncNewSiteButton(){
+  const region=$('regionSelect').value;
+  const ready=state.heavyReady&&!!region&&!extending();
+  $('newSiteBtn').disabled=!ready;
+  $('newSiteRegion').textContent=region||'your region';
+  if(!ready)closeNewSite();
+}
+function openNewSite(){
+  if($('newSiteBtn').disabled){toast('Select a region first.','error');return;}
+  /* Carry over whatever was already typed in the site box, if it is not a listed site. */
+  const typed=String($('siteInput').value||'').trim();
+  const listed=sitesInRegion().some(site=>norm(site)===norm(typed));
+  const input=$('newSiteInput');
+  if(!input.value&&typed&&!listed)input.value=typed;
+  $('customSiteFoot').classList.add('open');
+  $('newSitePanel').hidden=false;
+  setTimeout(()=>{input.focus();},30);
+}
+function closeNewSite(){
+  $('customSiteFoot').classList.remove('open');
+  $('newSitePanel').hidden=true;
+  $('newSiteInput').value='';
+}
+function submitNewSite(){
+  const name=String($('newSiteInput').value||'').trim().replace(/\s+/g,' ');
+  if(!name){toast('Type the name of the new site.','error');$('newSiteInput').focus();return;}
+  /* Already listed after all? Pick the listed one instead of making a duplicate. */
+  const match=sitesInRegion().find(site=>norm(site)===norm(name));
+  closeNewSite();
+  if(match){selectSite(match);toast('That site is already in the list, so it has been selected.','success');return;}
+  addCustomSite(name);
 }
 
 /* Choosing a site, from the list or typed in as a custom one. */
@@ -2505,7 +2578,9 @@ $('replaceClose').onclick=cancelPendingUpload;$('replaceCancel').onclick=cancelP
 $('lineClose').onclick=cancelPendingUpload;$('lineCancel').onclick=cancelPendingUpload;$('lineImport').onclick=importSelectedLines;$('lineBackdrop').onclick=event=>{if(event.target===$('lineBackdrop'))cancelPendingUpload();};
 $('viewBtn').onclick=openView;$('viewClose').onclick=()=>$('viewBackdrop').classList.remove('open');$('viewBackdrop').onclick=event=>{if(event.target===$('viewBackdrop'))$('viewBackdrop').classList.remove('open');};$('copyBtn').onclick=copyRows;$('csvBtn').onclick=downloadCsv;$('kmzBtn').onclick=downloadKmz;
 $('submitBtn').onclick=openConfirm;$('confirmClose').onclick=closeConfirm;$('confirmCancel').onclick=closeConfirm;$('confirmContinue').onclick=openOptionalEmail;$('confirmBackdrop').onclick=event=>{if(event.target===$('confirmBackdrop'))closeConfirm();};
-$('emailClose').onclick=()=>closeOptionalEmail(false);$('emailBack').onclick=()=>closeOptionalEmail(true);$('emailContinue').onclick=()=>continueOptionalEmail();$('emailBackdrop').onclick=event=>{if(event.target===$('emailBackdrop'))closeOptionalEmail(false);};$('optionalSubmitterEmail').oninput=()=>{$('emailInvalid').classList.remove('show');};$('optionalSubmitterEmail').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('submitterPhone').focus();}};$('submitterPhone').oninput=()=>{$('phoneInvalid').classList.remove('show');};$('submitterPhone').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();continueOptionalEmail();}};
+$('emailClose').onclick=()=>closeOptionalEmail(false);$('emailBack').onclick=()=>closeOptionalEmail(true);$('emailContinue').onclick=()=>continueOptionalEmail();$('emailBackdrop').onclick=event=>{if(event.target===$('emailBackdrop'))closeOptionalEmail(false);};$('optionalSubmitterEmail').oninput=()=>{$('emailInvalid').classList.remove('show');};$('newSiteBtn').onclick=openNewSite;$('newSiteCancel').onclick=closeNewSite;$('newSiteAdd').onclick=submitNewSite;
+$('newSiteInput').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();submitNewSite();}else if(event.key==='Escape'){event.preventDefault();closeNewSite();}};
+$('optionalSubmitterEmail').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('submitterPhone').focus();}};$('submitterPhone').oninput=()=>{$('phoneInvalid').classList.remove('show');};$('submitterPhone').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();continueOptionalEmail();}};
 $('confirmationAgain').onclick=resetRegistrationPortal;
 document.addEventListener('keydown',event=>{if(event.key!=='Escape'||state.submitting)return;closeCombo();openMapLayers(false);cancelPendingUpload();$('viewBackdrop').classList.remove('open');closeConfirm();closeOptionalEmail(false);});
 /* boot() is no longer called on load. The sign-in gate starts the app once a
